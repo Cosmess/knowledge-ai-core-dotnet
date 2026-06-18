@@ -25,8 +25,41 @@ services:
     volumes:
       - ollama_data:/root/.ollama
 
-  # api, mcp, grafana e prometheus ficam para um próximo passo (build das imagens
-  # da Api/Mcp e wiring de métricas/dashboards), igual ao docker-compose original.
+  api:
+    build:
+      context: .
+      dockerfile: src/KnowledgeAi.Api/Dockerfile
+    container_name: knowledge-ai-api
+    depends_on:
+      - postgres
+      - redis
+    ports:
+      - "8080:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Production
+      Postgres__ConnectionString: "Host=postgres;Database=knowledgeai;Username=postgres;Password=postgres"
+      Redis__ConnectionString: "redis:6379"
+      Jwt__SigningKey: "CHANGE_ME_use_a_long_random_secret_in_production"
+      ApiKey__Value: "CHANGE_ME_static_key_shared_with_the_mcp_server"
+      LlmProviders__OpenAiApiKey: "${OPENAI_API_KEY:-}"
+      LlmProviders__AnthropicApiKey: "${ANTHROPIC_API_KEY:-}"
+
+  # Processo MCP via stdio: não expõe porta de rede, fica vivo aguardando um
+  # cliente (ex.: Claude Desktop) conectar via `docker attach`/`docker exec`.
+  mcp:
+    build:
+      context: .
+      dockerfile: src/KnowledgeAi.Mcp/Dockerfile
+    container_name: knowledge-ai-mcp
+    depends_on:
+      - api
+    stdin_open: true
+    tty: true
+    environment:
+      KNOWLEDGE_API_BASE_URL: "http://api:8080"
+      KNOWLEDGE_API_KEY: "CHANGE_ME_static_key_shared_with_the_mcp_server"
+
+  # grafana e prometheus ficam para um próximo passo (wiring de métricas/dashboards).
 
 volumes:
   postgres_data:
