@@ -59,11 +59,11 @@ Dapper + SQL raw sobre Npgsql, não EF Core — dá controle total sobre a query
 |---|---|---|
 | A | Domain + Application (entidades, mediador, slices CQRS, ports) | Concluída |
 | B | Infrastructure (Postgres/Dapper, LLM providers, ingestão, Redis, auth, observabilidade) | Concluída — testada com Testcontainers |
-| C | Api (JWT, controllers, Swagger, Serilog/OpenTelemetry/prometheus-net wiring) | Pendente |
-| D | Mcp (SDK oficial, 6 tools, header `X-Api-Key`) | Pendente |
+| C | Api (JWT, controllers, Swagger, Serilog/OpenTelemetry/prometheus-net wiring) | Concluída |
+| D | Mcp (SDK oficial, 6 tools, header `X-Api-Key`) | Concluída |
 | E | Testes ponta a ponta com `WebApplicationFactory`, docker-compose | Pendente |
 
-`KnowledgeAi.Api` e `KnowledgeAi.Mcp` hoje são apenas o scaffold padrão do template (`Program.cs` default) — controllers, autenticação e as tools MCP ainda não foram implementados.
+`KnowledgeAi.Api` expõe os 12 endpoints documentados com JWT Bearer + scheme `ApiKey` dedicado para `/mcp/search`. `KnowledgeAi.Mcp` usa o SDK oficial `ModelContextProtocol` via stdio e chama a Api autenticado com `X-Api-Key`.
 
 ## Rodando localmente
 
@@ -74,17 +74,29 @@ dotnet build
 dotnet test
 ```
 
-Configuração esperada (ainda não wirada em `appsettings.json`, mas já lida pelas `Options` em `Infrastructure`):
+Configuração em `src/KnowledgeAi.Api/appsettings.json` (valores de placeholder — preencha `OpenAiApiKey`/`AnthropicApiKey`/`ApiKey:Value`/`Jwt:SigningKey` com segredos reais antes de usar fora de dev local):
 
 ```json
 {
   "Postgres": { "ConnectionString": "Host=localhost;Database=knowledgeai;Username=postgres;Password=postgres" },
   "Redis": { "ConnectionString": "localhost:6379" },
   "Jwt": { "SigningKey": "...", "Issuer": "knowledge-ai-core", "Audience": "knowledge-ai-clients" },
+  "ApiKey": { "Value": "..." },
   "LlmProviders": { "ChatProvider": "OpenAi", "OpenAiApiKey": "..." },
   "Confluence": { "BaseUrl": "https://your-domain.atlassian.net/wiki/", "Email": "...", "ApiToken": "..." }
 }
 ```
+
+Subindo a Api e o Mcp localmente:
+
+```bash
+dotnet run --project src/KnowledgeAi.Api --urls http://localhost:5080
+
+KNOWLEDGE_API_BASE_URL=http://localhost:5080 KNOWLEDGE_API_KEY=<mesmo valor de ApiKey:Value> \
+  dotnet run --project src/KnowledgeAi.Mcp
+```
+
+O `KnowledgeAi.Mcp` conecta via `stdio` e expõe `search_technical_docs`, `search_business_rules`, `search_api_docs`, `search_architecture_docs`, `search_user_stories` e `get_service_context`, cada uma chamando `POST /mcp/search` na Api com o header `X-Api-Key`.
 
 ## Documentação
 
