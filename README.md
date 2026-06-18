@@ -6,7 +6,7 @@ Reescrita em .NET/C# do backend RAG `knowledge-ai-core` (originalmente NestJS/Ty
 - OpenAI, Anthropic e Ollama têm provedores de chat/embedding reais (só OpenAI funcionava de fato).
 - Mascaramento de dados sensíveis plugado no pipeline de log do Serilog (existia como função solta, não usada).
 - Reindexação incremental do Confluence comparando `version`/`updatedAt` (antes era sempre reingestão completa).
-- Cobertura de testes real: unitários para o mediador/regras de negócio e um teste de integração contra Postgres+pgvector via Testcontainers.
+- Cobertura de testes real: unitários para mediador, validators, chunking e logica de threshold de evidencia, mais testes de integracao ponta a ponta (/chat, /mcp/search, /ingest/markdown) com WebApplicationFactory + Postgres/pgvector via Testcontainers.
 
 A documentação de design original (SDD) foi trazida para [`docs/`](docs/README.md) e permanece válida como referência de domínio, contratos e taxonomia — as seções abaixo descrevem o que mudou na reescrita.
 
@@ -51,7 +51,7 @@ Dapper + SQL raw sobre Npgsql, não EF Core — dá controle total sobre a query
 | Auth | JWT (`System.IdentityModel.Tokens.Jwt`), PBKDF2 para senha |
 | Observabilidade | Serilog, OpenTelemetry, `prometheus-net` |
 | MCP | SDK oficial `ModelContextProtocol` (stdio) |
-| Testes | xUnit, FluentAssertions, Testcontainers.PostgreSql (imagem `pgvector/pgvector:pg16`) |
+| Testes | xUnit, FluentAssertions, NSubstitute, Testcontainers.PostgreSql (imagem `pgvector/pgvector:pg16`), `Microsoft.AspNetCore.Mvc.Testing` |
 
 ## Status atual
 
@@ -61,9 +61,9 @@ Dapper + SQL raw sobre Npgsql, não EF Core — dá controle total sobre a query
 | B | Infrastructure (Postgres/Dapper, LLM providers, ingestão, Redis, auth, observabilidade) | Concluída — testada com Testcontainers |
 | C | Api (JWT, controllers, Swagger, Serilog/OpenTelemetry/prometheus-net wiring) | Concluída |
 | D | Mcp (SDK oficial, 6 tools, header `X-Api-Key`) | Concluída |
-| E | Testes ponta a ponta com `WebApplicationFactory`, docker-compose | Pendente |
+| E | Testes (unit + integracao com `WebApplicationFactory`), docker-compose | Concluida |
 
-`KnowledgeAi.Api` expõe os 12 endpoints documentados com JWT Bearer + scheme `ApiKey` dedicado para `/mcp/search`. `KnowledgeAi.Mcp` usa o SDK oficial `ModelContextProtocol` via stdio e chama a Api autenticado com `X-Api-Key`.
+`KnowledgeAi.Api` expõe os 12 endpoints documentados com JWT Bearer + scheme `ApiKey` dedicado para `/mcp/search`. `KnowledgeAi.Mcp` usa o SDK oficial `ModelContextProtocol` via stdio e chama a Api autenticado com `X-Api-Key`. `dotnet test` na solution roda 28 testes unitários e 9 de integração (todos via Testcontainers, sem dependência de serviços externos rodando localmente); `docker-compose.yml` sobe Postgres+pgvector, Redis e Ollama para uso manual fora dos testes — Api/Mcp/Grafana/Prometheus como containers ficam para um próximo passo.
 
 ## Rodando localmente
 

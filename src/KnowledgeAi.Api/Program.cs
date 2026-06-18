@@ -52,3 +52,5 @@ app.MapControllers();
 app.MapMetrics();
 
 app.Run();
+
+public partial class Program;

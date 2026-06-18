@@ -1,0 +1,33 @@
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: knowledge-ai-postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: knowledgeai
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: knowledge-ai-redis
+    ports:
+      - "6379:6379"
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: knowledge-ai-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+
+  # api, mcp, grafana e prometheus ficam para um próximo passo (build das imagens
+  # da Api/Mcp e wiring de métricas/dashboards), igual ao docker-compose original.
+
+volumes:
+  postgres_data:
+  ollama_data:
