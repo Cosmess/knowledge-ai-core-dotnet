@@ -7,8 +7,9 @@ Nunca registrar em logs:
 - API keys
 - senhas
 - segredos
-- dados sensíveis brutos de clientes
 
-Dados sensíveis devem ser mascarados antes de logs estruturados.
+Esse mascaramento já está implementado e ativo: o pipeline de logging (Serilog) usa um `SensitiveDataMaskingEnricher` que mascara propriedades de log cujo nome contém `password`, `token`, `apikey`, `secret`, `accesstoken`, `refreshtoken` ou `authorization`, antes de qualquer log estruturado ser emitido — não é mais um helper desconectado do pipeline.
 
-O package `observability` fornece helpers iniciais de mascaramento e deve ser expandido conforme tipos concretos de dados forem identificados.
+## Limitação Conhecida
+
+O mascaramento atual age só pelo **nome** da propriedade de log. Ele não faz DLP de conteúdo: não detecta nem mascara dados sensíveis (CPF, e-mail, etc.) que apareçam dentro de texto livre/valores de propriedades cujo nome não bate com a lista acima. Se um caso assim for identificado, o enricher precisa ser expandido com regras adicionais por padrão de valor, não só por nome.

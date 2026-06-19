@@ -1,6 +1,6 @@
 # Exemplos Práticos Com cURL
 
-Este guia mostra um fluxo mínimo para testar a API localmente.
+Este guia mostra um fluxo mínimo para testar a API .NET localmente.
 
 ## 1. Subir Dependências
 
@@ -19,50 +19,43 @@ Ollama: localhost:11434
 ## 2. Rodar A API
 
 ```bash
-pnpm dev:api
+dotnet run --project src/KnowledgeAi.Api
 ```
 
-URL base:
+URL base (padrão local):
 
 ```txt
-http://localhost:3000
+http://localhost:5080
 ```
 
-Swagger:
+No `docker-compose.yml`, a API é exposta em `8080:8080`.
+
+Swagger (só em ambiente Development):
 
 ```txt
-http://localhost:3000/docs
+http://localhost:5080/swagger
 ```
 
 ## 3. Health Check
 
 ```bash
-curl http://localhost:3000/health
+curl http://localhost:5080/health
 ```
 
 Resposta esperada:
 
 ```json
 {
-  "status": "ok",
-  "service": "knowledge-api",
-  "timestamp": "2026-06-03T00:00:00.000Z"
+  "status": "ok"
 }
 ```
 
 ## 4. Login
 
-Usuário padrão de desenvolvimento:
-
-```txt
-email: admin@example.com
-password: admin
-```
-
 ```bash
-curl -X POST http://localhost:3000/auth/login \
+curl -X POST http://localhost:5080/auth/login \
   -H "Content-Type: application/json" \
-  -d "{\"email\":\"admin@example.com\",\"password\":\"admin\"}"
+  -d '{"email":"usuario@empresa.com","password":"senha"}'
 ```
 
 Resposta:
@@ -75,14 +68,14 @@ Resposta:
 }
 ```
 
-No PowerShell, guarde o token assim:
+No PowerShell:
 
 ```powershell
 $login = Invoke-RestMethod `
   -Method Post `
-  -Uri "http://localhost:3000/auth/login" `
+  -Uri "http://localhost:5080/auth/login" `
   -ContentType "application/json" `
-  -Body '{"email":"admin@example.com","password":"admin"}'
+  -Body '{"email":"usuario@empresa.com","password":"senha"}'
 
 $token = $login.accessToken
 ```
@@ -90,46 +83,22 @@ $token = $login.accessToken
 No bash:
 
 ```bash
-TOKEN=$(curl -s -X POST http://localhost:3000/auth/login \
+TOKEN=$(curl -s -X POST http://localhost:5080/auth/login \
   -H "Content-Type: application/json" \
-  -d '{"email":"admin@example.com","password":"admin"}' | jq -r '.accessToken')
+  -d '{"email":"usuario@empresa.com","password":"senha"}' | jq -r '.accessToken')
 ```
 
 ## 5. Usuário Atual
 
-PowerShell:
-
-```powershell
-curl.exe http://localhost:3000/auth/me `
-  -H "Authorization: Bearer $token"
-```
-
-Bash:
-
 ```bash
-curl http://localhost:3000/auth/me \
+curl http://localhost:5080/auth/me \
   -H "Authorization: Bearer $TOKEN"
 ```
 
-## 6. Ingestão Markdown
-
-Por padrão, a API lê a pasta configurada em `MARKDOWN_DOCS_ROOT`.
-
-Também é possível informar `rootDir` no request:
-
-PowerShell:
-
-```powershell
-curl.exe -X POST http://localhost:3000/ingest/markdown `
-  -H "Content-Type: application/json" `
-  -H "Authorization: Bearer $token" `
-  -d "{\"rootDir\":\"docs\",\"spaceKey\":\"ENG\"}"
-```
-
-Bash:
+## 6. Ingestão Markdown (requer role Admin)
 
 ```bash
-curl -X POST http://localhost:3000/ingest/markdown \
+curl -X POST http://localhost:5080/ingest/markdown \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
   -d '{"rootDir":"docs","spaceKey":"ENG"}'
@@ -145,30 +114,12 @@ Resposta:
 }
 ```
 
-## 7. Ingestão Confluence
+Sem role `Admin`, a resposta é `403 Forbidden`.
 
-Antes, configure:
-
-```env
-CONFLUENCE_BASE_URL=https://empresa.atlassian.net/wiki
-CONFLUENCE_EMAIL=usuario@empresa.com
-CONFLUENCE_API_TOKEN=token
-CONFLUENCE_DEFAULT_SPACE=ENG
-```
-
-PowerShell:
-
-```powershell
-curl.exe -X POST http://localhost:3000/ingest/confluence `
-  -H "Content-Type: application/json" `
-  -H "Authorization: Bearer $token" `
-  -d "{\"spaceKey\":\"ENG\"}"
-```
-
-Bash:
+## 7. Ingestão Confluence (requer role Admin)
 
 ```bash
-curl -X POST http://localhost:3000/ingest/confluence \
+curl -X POST http://localhost:5080/ingest/confluence \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $TOKEN" \
   -d '{"spaceKey":"ENG"}'
@@ -176,72 +127,57 @@ curl -X POST http://localhost:3000/ingest/confluence \
 
 ## 8. Chat
 
-PowerShell:
-
-```powershell
-curl.exe -X POST http://localhost:3000/chat `
-  -H "Content-Type: application/json" `
-  -d "{\"question\":\"Como funciona o fluxo de liquidação?\",\"audience\":\"developers\",\"spaceKey\":\"ENG\"}"
-```
-
-Bash:
+Requer JWT válido. Se o `spaceKey` pedido não estiver entre os `allowedSpaceKeys` do usuário, a resposta é `403 Forbidden`.
 
 ```bash
-curl -X POST http://localhost:3000/chat \
+curl -X POST http://localhost:5080/chat \
   -H "Content-Type: application/json" \
-  -d '{"question":"Como funciona o fluxo de liquidação?","audience":"developers","spaceKey":"ENG"}'
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"question":"Como funciona o fluxo de liquidação?","audience":"developers","spaceKey":"ENG","system":"settlement-service"}'
 ```
 
-Resposta:
+Resposta (evidência suficiente):
 
 ```json
 {
   "answer": "Resposta baseada nos trechos recuperados...",
-  "domain": "business_rule",
+  "domain": "business",
   "sources": [
     {
-      "id": "uuid",
       "title": "Documento",
-      "source": "markdown",
-      "url": "C:\\projetos\\knowledge-ai-core\\docs\\arquivo.md",
-      "documentType": "technical_doc",
-      "content": "Trecho recuperado...",
+      "url": "docs/arquivo.md",
       "score": 0.82
     }
   ],
-  "confidence": "high"
+  "evidenceStatus": "found",
+  "confidence": 0.82
 }
 ```
 
-Quando não houver evidência suficiente:
+Quando não houver evidência suficiente (score do melhor resultado abaixo de 0.15):
 
 ```json
 {
-  "answer": "Não encontrei evidência suficiente na base indexada para responder com segurança...",
+  "answer": "Não há evidência suficiente nas fontes recuperadas para responder com confiança.",
   "domain": "technical",
   "sources": [],
-  "confidence": "low"
+  "evidenceStatus": "insufficient",
+  "confidence": 0
 }
 ```
 
+`confidence` é sempre um número (0 a 1), não uma string `"high"`/`"low"`.
+
 ## 9. Busca MCP Pela API
 
-Esse endpoint é usado pelo MCP Server.
-
-PowerShell:
-
-```powershell
-curl.exe -X POST http://localhost:3000/mcp/search `
-  -H "Content-Type: application/json" `
-  -d "{\"query\":\"Qual endpoint consulta contratos?\",\"domain\":\"api_documentation\",\"audience\":\"developers\",\"spaceKey\":\"ENG\",\"limit\":5}"
-```
-
-Bash:
+Esse endpoint é chamado pelo servidor MCP. Exige `X-Api-Key` **e** `Authorization: Bearer` (JWT de usuário) ao mesmo tempo — faltando qualquer um dos dois, a resposta é `401`.
 
 ```bash
-curl -X POST http://localhost:3000/mcp/search \
+curl -X POST http://localhost:5080/mcp/search \
   -H "Content-Type: application/json" \
-  -d '{"query":"Qual endpoint consulta contratos?","domain":"api_documentation","audience":"developers","spaceKey":"ENG","limit":5}'
+  -H "X-Api-Key: $API_KEY" \
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"query":"Qual endpoint consulta contratos?","domain":"api","audience":"developers","spaceKey":"ENG","limit":5}'
 ```
 
 Resposta:
@@ -249,99 +185,61 @@ Resposta:
 ```json
 {
   "query": "Qual endpoint consulta contratos?",
-  "domain": "api_documentation",
+  "domain": "api",
   "results": [],
   "evidenceStatus": "insufficient"
 }
 ```
 
+Se `spaceKey` não estiver entre os `allowedSpaceKeys` do usuário do token, a resposta é `403 Forbidden`.
+
 ## 10. Listar Documentos
 
-PowerShell:
-
-```powershell
-curl.exe http://localhost:3000/documents `
-  -H "Authorization: Bearer $token"
-```
-
-Bash:
-
 ```bash
-curl http://localhost:3000/documents \
+curl http://localhost:5080/documents \
   -H "Authorization: Bearer $TOKEN"
 ```
 
 ## 11. Listar Spaces
 
-PowerShell:
-
-```powershell
-curl.exe http://localhost:3000/spaces `
-  -H "Authorization: Bearer $token"
-```
-
-Bash:
-
 ```bash
-curl http://localhost:3000/spaces \
+curl http://localhost:5080/spaces \
   -H "Authorization: Bearer $TOKEN"
 ```
 
 ## 12. Feedback
 
-PowerShell:
-
-```powershell
-curl.exe -X POST http://localhost:3000/feedback `
-  -H "Content-Type: application/json" `
-  -d "{\"question\":\"Como funciona o fluxo?\",\"answer\":\"Resposta recebida\",\"useful\":true,\"comment\":\"Resposta útil\"}"
-```
-
-Bash:
-
 ```bash
-curl -X POST http://localhost:3000/feedback \
+curl -X POST http://localhost:5080/feedback \
   -H "Content-Type: application/json" \
-  -d '{"question":"Como funciona o fluxo?","answer":"Resposta recebida","useful":true,"comment":"Resposta útil"}'
+  -H "Authorization: Bearer $TOKEN" \
+  -d '{"chatMessageId":"00000000-0000-0000-0000-000000000000","helpful":true,"comment":"Resposta útil"}'
 ```
+
+Resposta: `204 No Content`.
 
 ## 13. Métricas
 
 ```bash
-curl http://localhost:3000/metrics
+curl http://localhost:5080/metrics
 ```
 
-Resposta:
+Resposta em formato texto Prometheus (via `prometheus-net`), não JSON:
 
-```json
-{
-  "requests": 1,
-  "answered": 1,
-  "insufficientEvidence": 0,
-  "fallbacks": 1,
-  "totalLatencyMs": 120,
-  "averageLatencyMs": 120
-}
+```txt
+# HELP http_requests_received_total ...
+# TYPE http_requests_received_total counter
+http_requests_received_total{...} 1
+...
 ```
 
 ## 14. Rodar O MCP Localmente
 
-Com a API rodando:
-
 ```bash
-pnpm dev:mcp
+KNOWLEDGE_API_BASE_URL=http://localhost:5080 \
+KNOWLEDGE_API_KEY=<api-key> \
+KNOWLEDGE_USER_JWT=$TOKEN \
+dotnet run --project src/KnowledgeAi.Mcp
 ```
 
-Ou via cliente MCP:
-
-```bash
-pnpm --dir C:\projetos\knowledge-ai-core dev:mcp
-```
-
-Exemplos de configuração:
-
-```txt
-.codex/config.toml.example
-.cursor/mcp.json.example
-.vscode/mcp.json.example
-```
+As três variáveis são obrigatórias — o processo falha ao iniciar se `KNOWLEDGE_API_KEY` ou `KNOWLEDGE_USER_JWT` estiverem ausentes. `KNOWLEDGE_USER_JWT` é o mesmo JWT obtido em `POST /auth/login` (passo 4); quando expirar, gere um novo e reinicie o cliente MCP. Veja `docs/mcp/client-configuration.md` para exemplos de configuração em clientes como Claude Desktop, Cursor e VS Code.

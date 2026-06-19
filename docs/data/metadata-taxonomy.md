@@ -1,52 +1,84 @@
 # Taxonomia De Metadados
 
-## Domínios
+## Onde os metadados vivem
+
+Os campos `source`, `spaceKey`, `documentType`, `audience`, `system`, `title`, `url`, `version` e `updatedAt` são colunas relacionais da entidade `Document` (tabela `documents`) — não um blob JSON.
+
+O único metadado em formato JSON real é `DocumentChunk.Metadata` (coluna `document_chunks.metadata`, tipo `jsonb`), que na prática contém apenas a chave `headingPath`: o caminho hierárquico do heading do chunk, por exemplo `"Título > Subtítulo"`.
+
+## Domínios (`KnowledgeDomain`)
+
+Enum em `KnowledgeAi.Domain.ValueObjects.KnowledgeDomain`:
 
 ```txt
-technical
-business
-operations
-product
-onboarding
-architecture
-api
-incident
-backlog
-runbook
-troubleshooting
+Technical
+Business
+Operations
+Product
+Onboarding
+Architecture
+Api
+Incident
+Backlog
+Runbook
+Troubleshooting
 ```
 
-## Tipos De Documento
+## Tipos De Documento (`DocumentType`)
+
+Enum em `KnowledgeAi.Domain.ValueObjects.DocumentType`:
 
 ```txt
-technical_doc
-business_rule
-api_doc
-architecture_decision
-user_story
-next_task
-runbook
-faq
-onboarding_doc
-product_doc
-operational_process
-event_contract
-database_doc
-integration_doc
+TechnicalDoc
+BusinessRule
+ApiDoc
+ArchitectureDecision
+UserStory
+NextTask
+Runbook
+Faq
+OnboardingDoc
+ProductDoc
+OperationalProcess
+EventContract
+DatabaseDoc
+IntegrationDoc
 ```
 
-## Metadados Obrigatórios
+Nem todo `DocumentType`/`KnowledgeDomain` tem um pipeline de ingestão dedicado: apenas Markdown e Confluence são fontes de ingestão implementadas (`DocumentSource`). Documentos com outras combinações de tipo/domínio (ex.: `ApiDoc`, `Runbook`, `NextTask`) só existem se forem classificados manualmente com esses metadados ao ingerir via Markdown ou Confluence.
+
+## Audiência (`Audience`)
+
+Enum em `KnowledgeAi.Domain.ValueObjects.Audience` — um tipo restrito do C#, não uma string livre:
+
+```txt
+Developers
+Operations
+Product
+Support
+Viewer
+```
+
+## Exemplo De Documento
+
+Os valores abaixo ilustram os campos da entidade `Document`, todos colunas relacionais (não um JSON):
+
+```txt
+source:       Confluence
+spaceKey:     ENG
+documentType: BusinessRule
+audience:     Developers
+system:       settlement-service
+title:        Regras de Liquidacao
+url:          https://empresa.atlassian.net/wiki/...
+version:      12
+updatedAt:    2026-06-02T10:00:00Z
+```
+
+O `DocumentChunk` correspondente carrega, além do `content` e do `embedding`, o `domain` (`KnowledgeDomain`) e o `metadata` jsonb com o `headingPath`, por exemplo:
 
 ```json
 {
-  "source": "confluence",
-  "spaceKey": "ENG",
-  "documentType": "business_rule",
-  "audience": "developers",
-  "system": "settlement-service",
-  "title": "Regras de Liquidacao",
-  "url": "https://empresa.atlassian.net/wiki/...",
-  "version": 12,
-  "updatedAt": "2026-06-02T10:00:00Z"
+  "headingPath": "Regras de Liquidacao > Janela de Processamento"
 }
 ```

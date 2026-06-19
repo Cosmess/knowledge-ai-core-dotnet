@@ -67,11 +67,36 @@ public sealed class DocumentRepositoryTests : IAsyncLifetime
         }, CancellationToken.None);
 
         var results = await _repository.SearchAsync(
-            new DocumentSearchQuery(closeEmbedding, Domain: null, Audience: null, SpaceKey: null, System: null, Limit: 5),
+            new DocumentSearchQuery(closeEmbedding, QueryText: "", Domain: null, Audience: null, SpaceKey: null, System: null, Limit: 5),
             CancellationToken.None);
 
         results.Should().HaveCount(2);
         results[0].Chunk.Content.Should().Be("relevant content");
+        results[0].Score.Should().BeGreaterThan(results[1].Score);
+    }
+
+    [Fact]
+    public async Task SearchAsync_RanksChunkMatchingQueryTextHigherThanEquallyDistantChunkWithoutMatch()
+    {
+        var document = await _repository.UpsertDocumentAsync(
+            BuildDocument(url: "https://docs.local/page-3", version: 1), CancellationToken.None);
+
+        // Both chunks are equidistant from the query embedding, so the vector score alone is a tie;
+        // hybrid ranking should break the tie in favor of the chunk whose text matches the query.
+        var sharedEmbedding = BuildEmbedding(seed: 1f);
+
+        await _repository.SaveChunksAsync(document.Id, new[]
+        {
+            BuildChunk(document.Id, "como funciona o fluxo de liquidacao financeira", sharedEmbedding),
+            BuildChunk(document.Id, "instrucoes de instalacao do ambiente de desenvolvimento", sharedEmbedding),
+        }, CancellationToken.None);
+
+        var results = await _repository.SearchAsync(
+            new DocumentSearchQuery(sharedEmbedding, QueryText: "fluxo de liquidacao", Domain: null, Audience: null, SpaceKey: null, System: null, Limit: 5),
+            CancellationToken.None);
+
+        results.Should().HaveCount(2);
+        results[0].Chunk.Content.Should().Contain("liquidacao");
         results[0].Score.Should().BeGreaterThan(results[1].Score);
     }
 

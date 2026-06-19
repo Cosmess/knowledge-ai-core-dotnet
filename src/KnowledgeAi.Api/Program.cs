@@ -5,6 +5,7 @@ using KnowledgeAi.Api.ExceptionHandling;
 using KnowledgeAi.Api.Swagger;
 using KnowledgeAi.Application;
 using KnowledgeAi.Infrastructure;
+using KnowledgeAi.Infrastructure.Auth;
 using KnowledgeAi.Infrastructure.Observability;
 using KnowledgeAi.Infrastructure.Persistence;
 using Prometheus;
@@ -31,6 +32,9 @@ using (var scope = app.Services.CreateScope())
 {
     var initializer = scope.ServiceProvider.GetRequiredService<DatabaseInitializer>();
     await initializer.InitializeAsync();
+
+    var adminSeeder = scope.ServiceProvider.GetRequiredService<AdminUserSeeder>();
+    await adminSeeder.SeedAsync();
 }
 
 app.UseApiExceptionHandling();

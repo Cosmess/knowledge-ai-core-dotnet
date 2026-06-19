@@ -16,10 +16,11 @@ public sealed class OpenAiLlmProvider : ILlmProvider
         _chatClient = new ChatClient(settings.OpenAiChatModel, settings.OpenAiApiKey);
     }
 
-    public async Task<string> CompleteAsync(string systemPrompt, string userPrompt, CancellationToken cancellationToken)
+    public async Task<LlmCompletionResult> CompleteAsync(string systemPrompt, string userPrompt, CancellationToken cancellationToken)
     {
         ChatMessage[] messages = [new SystemChatMessage(systemPrompt), new UserChatMessage(userPrompt)];
         var completion = await _chatClient.CompleteChatAsync(messages, cancellationToken: cancellationToken);
-        return completion.Value.Content[0].Text;
+        var usage = completion.Value.Usage;
+        return new LlmCompletionResult(completion.Value.Content[0].Text, usage?.InputTokenCount, usage?.OutputTokenCount);
     }
 }

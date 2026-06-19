@@ -41,6 +41,28 @@ public sealed class UserRepository : IUserRepository
         return row?.ToEntity();
     }
 
+    public async Task<bool> CreateIfNotExistsAsync(User user, CancellationToken cancellationToken)
+    {
+        const string sql = """
+            insert into users (id, email, password_hash, role, allowed_space_keys, created_at)
+            values (@Id, @Email, @PasswordHash, @Role, @AllowedSpaceKeys, @CreatedAt)
+            on conflict (email) do nothing;
+            """;
+
+        await using var connection = await _dataSource.OpenConnectionAsync(cancellationToken);
+        var rowsAffected = await connection.ExecuteAsync(new CommandDefinition(sql, new
+        {
+            user.Id,
+            user.Email,
+            user.PasswordHash,
+            Role = user.Role.ToString(),
+            AllowedSpaceKeys = user.AllowedSpaceKeys.ToArray(),
+            CreatedAt = user.CreatedAt.UtcDateTime,
+        }, cancellationToken: cancellationToken));
+
+        return rowsAffected > 0;
+    }
+
     private sealed class UserRow
     {
         public Guid Id { get; init; }

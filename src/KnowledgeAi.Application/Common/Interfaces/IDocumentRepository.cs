@@ -5,11 +5,13 @@ namespace KnowledgeAi.Application.Common.Interfaces;
 
 public sealed record DocumentSearchQuery(
     float[] QueryEmbedding,
+    string QueryText,
     KnowledgeDomain? Domain,
     Audience? Audience,
     string? SpaceKey,
     string? System,
-    int Limit);
+    int Limit,
+    IReadOnlyCollection<string>? AllowedSpaceKeys = null);
 
 public sealed record DocumentChunkSearchResult(DocumentChunk Chunk, Document Document, double Score);
 

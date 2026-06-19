@@ -19,7 +19,7 @@ public sealed class AnthropicLlmProvider : ILlmProvider
         _model = settings.AnthropicChatModel;
     }
 
-    public async Task<string> CompleteAsync(string systemPrompt, string userPrompt, CancellationToken cancellationToken)
+    public async Task<LlmCompletionResult> CompleteAsync(string systemPrompt, string userPrompt, CancellationToken cancellationToken)
     {
         var parameters = new MessageParameters
         {
@@ -30,6 +30,6 @@ public sealed class AnthropicLlmProvider : ILlmProvider
         };
 
         var response = await _client.Messages.GetClaudeMessageAsync(parameters, cancellationToken);
-        return response.FirstMessage.Text;
+        return new LlmCompletionResult(response.FirstMessage.Text, response.Usage?.InputTokens, response.Usage?.OutputTokens);
     }
 }

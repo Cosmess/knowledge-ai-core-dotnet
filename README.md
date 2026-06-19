@@ -62,8 +62,23 @@ Dapper + SQL raw sobre Npgsql, não EF Core — dá controle total sobre a query
 | C | Api (JWT, controllers, Swagger, Serilog/OpenTelemetry/prometheus-net wiring) | Concluída |
 | D | Mcp (SDK oficial, 6 tools, header `X-Api-Key`) | Concluída |
 | E | Testes (unit + integracao com `WebApplicationFactory`), docker-compose | Concluida |
+| F | Autorização por space, identidade no MCP, seed de admin, sanitização, hybrid search/reranking, LLMOps, Grafana/Prometheus | Concluída |
 
-`KnowledgeAi.Api` expõe os 12 endpoints documentados com JWT Bearer + scheme `ApiKey` dedicado para `/mcp/search`. `KnowledgeAi.Mcp` usa o SDK oficial `ModelContextProtocol` via stdio e chama a Api autenticado com `X-Api-Key`. `dotnet test` na solution roda 28 testes unitários e 9 de integração (todos via Testcontainers, sem dependência de serviços externos rodando localmente); `docker-compose.yml` sobe Postgres+pgvector, Redis e Ollama para uso manual fora dos testes — Api/Mcp/Grafana/Prometheus como containers ficam para um próximo passo.
+`KnowledgeAi.Api` expõe os 12 endpoints documentados com JWT Bearer + scheme `ApiKey` dedicado para `/mcp/search` (esse endpoint agora exige os dois ao mesmo tempo — ver abaixo). `KnowledgeAi.Mcp` usa o SDK oficial `ModelContextProtocol` via stdio e chama a Api autenticado com `X-Api-Key` **e** um JWT de usuário final (`KNOWLEDGE_USER_JWT`), para que a Api consiga aplicar autorização por `spaceKey` por usuário também nesse caminho. `dotnet test` na solution roda 46 testes unitários e 15 de integração (todos via Testcontainers, sem dependência de serviços externos rodando localmente); `docker-compose.yml` sobe Postgres+pgvector, Redis, Ollama, Api, Mcp, Prometheus e Grafana como containers — todos já wireados (Prometheus faz scrape de `api:8080/metrics`; Grafana provisiona datasource e dashboard automaticamente a partir de `ops/grafana/provisioning/`).
+
+### Correções de segurança e qualidade
+
+- `/chat` e `/mcp/search` agora aplicam `AllowedSpaceKeys` do usuário autenticado: pedir um `spaceKey` fora dessa lista retorna `403 Forbidden` (antes, qualquer usuário autenticado podia consultar qualquer space).
+- `/mcp/search` agora exige um JWT de usuário (`KNOWLEDGE_USER_JWT`) além da `X-Api-Key` compartilhada, para ter identidade real por chamada.
+- Chunking de páginas Confluence agora preserva `headingPath` (a normalização HTML converte `<h1>`-`<h6>` em headings estilo Markdown antes do chunking).
+- Conteúdo ingerido (Markdown e Confluence) passa por sanitização (`HtmlContentSanitizer`) antes do chunking, removendo tags/atributos perigosos (`<script>`, `<style>`, `on*=`, `javascript:`).
+
+### Roadmap implementado nesta rodada
+
+- **Seed de admin**: a Api cria um usuário `Admin` no startup a partir de `AdminSeed:Email`/`AdminSeed:Password` (idempotente; pulado se não configurado) — sem isso, um banco novo não tinha como logar.
+- **Grafana + Prometheus**: serviços reais no `docker-compose.yml`, configuração em `ops/` (ver `docs/operations/docker.md`).
+- **Métricas de LLMOps**: tokens de entrada/saída, custo estimado (configurável via `LlmPricing`), taxa de fallback e taxa de evidência insuficiente, expostas em `/metrics` (ver `docs/operations/llmops.md`).
+- **Busca híbrida + reranking**: `DocumentRepository.SearchAsync` agora combina similaridade vetorial (pgvector/HNSW) com full-text search (`tsvector`/GIN, `ts_rank_cd`) em duas etapas — kNN amplo via índice, depois rerank do conjunto candidato (ver `docs/rag/retrieval.md`).
 
 ## Rodando localmente
 
@@ -74,7 +89,7 @@ dotnet build
 dotnet test
 ```
 
-Configuração em `src/KnowledgeAi.Api/appsettings.json` (valores de placeholder — preencha `OpenAiApiKey`/`AnthropicApiKey`/`ApiKey:Value`/`Jwt:SigningKey` com segredos reais antes de usar fora de dev local):
+Configuração em `src/KnowledgeAi.Api/appsettings.json` (valores de placeholder — preencha `OpenAiApiKey`/`AnthropicApiKey`/`ApiKey:Value`/`Jwt:SigningKey`/`AdminSeed:Password` com segredos reais antes de usar fora de dev local):
 
 ```json
 {
@@ -82,10 +97,14 @@ Configuração em `src/KnowledgeAi.Api/appsettings.json` (valores de placeholder
   "Redis": { "ConnectionString": "localhost:6379" },
   "Jwt": { "SigningKey": "...", "Issuer": "knowledge-ai-core", "Audience": "knowledge-ai-clients" },
   "ApiKey": { "Value": "..." },
+  "AdminSeed": { "Email": "admin@example.com", "Password": "...", "SpaceKeys": ["ENG"] },
   "LlmProviders": { "ChatProvider": "OpenAi", "OpenAiApiKey": "..." },
+  "LlmPricing": { "Providers": { "openai": { "InputPricePerThousandTokens": 0, "OutputPricePerThousandTokens": 0 } } },
   "Confluence": { "BaseUrl": "https://your-domain.atlassian.net/wiki/", "Email": "...", "ApiToken": "..." }
 }
 ```
+
+`AdminSeed` cria um usuário `Admin` no startup se nenhum usuário com aquele e-mail existir (idempotente); deixe `Email`/`Password` vazios para pular. `LlmPricing` é opcional — sem ele, o custo estimado nas métricas fica em `0` em vez de usar um preço chumbado e potencialmente desatualizado.
 
 Subindo a Api e o Mcp localmente:
 

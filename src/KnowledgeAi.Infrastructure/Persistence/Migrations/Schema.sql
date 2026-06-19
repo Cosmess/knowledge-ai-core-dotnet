@@ -38,8 +38,17 @@ create table if not exists document_chunks (
     updated_at timestamptz not null default now()
 );
 
+-- Generated column for hybrid search (vector similarity + full-text rank). Added via ALTER
+-- (rather than inline in the CREATE TABLE above) so it also backfills databases created
+-- before hybrid search existed.
+alter table document_chunks
+    add column if not exists search_vector tsvector generated always as (to_tsvector('portuguese', content)) stored;
+
 create index if not exists document_chunks_embedding_idx
     on document_chunks using hnsw (embedding vector_cosine_ops);
+
+create index if not exists document_chunks_search_vector_idx
+    on document_chunks using gin (search_vector);
 
 create table if not exists chat_sessions (
     id uuid primary key,

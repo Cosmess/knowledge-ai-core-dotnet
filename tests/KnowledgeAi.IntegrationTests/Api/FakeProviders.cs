@@ -12,6 +12,6 @@ public sealed class FakeLlmProvider : ILlmProvider
 {
     public string ProviderName => "fake";
 
-    public Task<string> CompleteAsync(string systemPrompt, string userPrompt, CancellationToken cancellationToken) =>
-        Task.FromResult("fake answer");
+    public Task<LlmCompletionResult> CompleteAsync(string systemPrompt, string userPrompt, CancellationToken cancellationToken) =>
+        Task.FromResult(new LlmCompletionResult("fake answer", InputTokens: 10, OutputTokens: 5));
 }

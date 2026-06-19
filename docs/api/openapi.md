@@ -1,18 +1,13 @@
 # OpenAPI
 
-A API NestJS expõe Swagger/OpenAPI em:
+A API .NET (ASP.NET Core + Swashbuckle) expõe Swagger/OpenAPI em:
 
 ```txt
-/docs
+/swagger
 ```
 
-O repositório frontend deve gerar client e tipos a partir do contrato OpenAPI.
+Disponível apenas em ambiente Development (`app.Environment.IsDevelopment()`).
 
-Ferramentas recomendadas:
+O contrato OpenAPI descreve os dois esquemas de segurança usados pela API: `Bearer` (JWT) e `ApiKey` (header `X-Api-Key`, usado por `/mcp/search` em conjunto com o Bearer — ver `docs/api/auth.md`).
 
-```txt
-openapi-typescript
-openapi-fetch
-```
-
-Isso evita duplicação manual de DTOs entre `knowledge-ai-core` e `knowledge-ai-web`.
+Se um client/frontend precisar consumir essa API a partir de TypeScript, ferramentas como `openapi-typescript`/`openapi-fetch` continuam aplicáveis para gerar tipos a partir do contrato exposto em `/swagger`, evitando duplicação manual de DTOs.

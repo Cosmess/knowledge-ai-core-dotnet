@@ -9,6 +9,7 @@ namespace KnowledgeAi.Application.Ingestion.Commands;
 public sealed class IngestMarkdownCommandHandler : IRequestHandler<IngestMarkdownCommand, IngestionResult>
 {
     private readonly IMarkdownLoader _markdownLoader;
+    private readonly IContentSanitizer _contentSanitizer;
     private readonly IChunkingService _chunkingService;
     private readonly IEmbeddingProvider _embeddingProvider;
     private readonly IDocumentRepository _documentRepository;
@@ -16,12 +17,14 @@ public sealed class IngestMarkdownCommandHandler : IRequestHandler<IngestMarkdow
 
     public IngestMarkdownCommandHandler(
         IMarkdownLoader markdownLoader,
+        IContentSanitizer contentSanitizer,
         IChunkingService chunkingService,
         IEmbeddingProvider embeddingProvider,
         IDocumentRepository documentRepository,
         IIngestionJobRepository jobRepository)
     {
         _markdownLoader = markdownLoader;
+        _contentSanitizer = contentSanitizer;
         _chunkingService = chunkingService;
         _embeddingProvider = embeddingProvider;
         _documentRepository = documentRepository;
@@ -70,7 +73,8 @@ public sealed class IngestMarkdownCommandHandler : IRequestHandler<IngestMarkdow
         var domain = MetadataParsing.ParseEnumOrDefault(
             markdownDocument.Frontmatter.GetValueOrDefault("domain"), KnowledgeDomain.Technical);
 
-        var chunks = _chunkingService.Split(markdownDocument.Content);
+        var sanitizedContent = _contentSanitizer.Sanitize(markdownDocument.Content);
+        var chunks = _chunkingService.Split(sanitizedContent);
         var documentChunks = new List<DocumentChunk>(chunks.Count);
 
         foreach (var chunk in chunks)

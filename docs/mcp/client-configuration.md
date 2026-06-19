@@ -1,64 +1,60 @@
 # Configuração De Clientes MCP
 
-O `dev-knowledge-mcp` usa transporte `stdio`, então pode ser conectado a clientes MCP que executam um comando local.
+O servidor MCP (`KnowledgeAi.Mcp`, .NET) usa transporte `stdio`, então pode ser conectado a clientes MCP que executam um comando local.
 
 Antes de conectar qualquer cliente, a API precisa estar rodando:
 
 ```bash
-pnpm dev:api
+dotnet run --project src/KnowledgeAi.Api
 ```
 
 Depois, o cliente MCP pode iniciar o servidor com:
 
 ```bash
-pnpm --dir C:\projetos\knowledge-ai-core dev:mcp
+dotnet run --project src/KnowledgeAi.Mcp
 ```
 
-Variável necessária:
+Variáveis necessárias:
 
 ```env
-KNOWLEDGE_API_BASE_URL=http://localhost:3000
+KNOWLEDGE_API_BASE_URL=http://localhost:5080
+KNOWLEDGE_API_KEY=<chave fixa do processo MCP>
+KNOWLEDGE_USER_JWT=<JWT do usuário, obtido via POST /auth/login>
 ```
+
+`KNOWLEDGE_API_BASE_URL` é opcional (default `http://localhost:5080`). `KNOWLEDGE_API_KEY` e `KNOWLEDGE_USER_JWT` são **obrigatórias** — o processo falha ao iniciar se qualquer uma estiver ausente.
+
+`KNOWLEDGE_USER_JWT` identifica o usuário final por trás do processo MCP, permitindo que a API aplique `AllowedSpaceKeys` por usuário nas buscas via MCP (sem ele, o MCP só teria uma identidade de serviço compartilhada via API Key, sem usuário real associado). Esse JWT expira conforme `Jwt:ExpiresInSeconds` configurado na API; não há renovação automática — quando expirar, gere um novo token (`POST /auth/login`) e reinicie o cliente MCP com a variável atualizada.
 
 ## Codex
 
-Exemplo disponível em:
-
-```txt
-.codex/config.toml.example
-```
-
-Conteúdo:
+Adicione ao `.codex/config.toml`:
 
 ```toml
-[mcp_servers.dev-knowledge-mcp]
-command = "pnpm"
-args = ["--dir", "C:\\projetos\\knowledge-ai-core", "dev:mcp"]
+[mcp_servers.knowledge-ai-mcp]
+command = "dotnet"
+args = ["run", "--project", "C:\\projetos\\knowledge-ai-core-dotnet\\src\\KnowledgeAi.Mcp"]
 
-[mcp_servers.dev-knowledge-mcp.env]
-KNOWLEDGE_API_BASE_URL = "http://localhost:3000"
+[mcp_servers.knowledge-ai-mcp.env]
+KNOWLEDGE_API_BASE_URL = "http://localhost:5080"
+KNOWLEDGE_API_KEY = "<api-key>"
+KNOWLEDGE_USER_JWT = "<jwt-do-usuario>"
 ```
-
-Use esse conteúdo em `.codex/config.toml` quando quiser habilitar o MCP neste repositório.
 
 ## Cursor
 
-Exemplo disponível em:
-
-```txt
-.cursor/mcp.json.example
-```
-
-Conteúdo:
+Adicione ao `.cursor/mcp.json`:
 
 ```json
 {
   "mcpServers": {
-    "dev-knowledge-mcp": {
-      "command": "pnpm",
-      "args": ["--dir", "C:\\projetos\\knowledge-ai-core", "dev:mcp"],
+    "knowledge-ai-mcp": {
+      "command": "dotnet",
+      "args": ["run", "--project", "C:\\projetos\\knowledge-ai-core-dotnet\\src\\KnowledgeAi.Mcp"],
       "env": {
-        "KNOWLEDGE_API_BASE_URL": "http://localhost:3000"
+        "KNOWLEDGE_API_BASE_URL": "http://localhost:5080",
+        "KNOWLEDGE_API_KEY": "<api-key>",
+        "KNOWLEDGE_USER_JWT": "<jwt-do-usuario>"
       }
     }
   }
@@ -67,23 +63,19 @@ Conteúdo:
 
 ## VS Code
 
-Exemplo disponível em:
-
-```txt
-.vscode/mcp.json.example
-```
-
-Conteúdo:
+Adicione ao `.vscode/mcp.json`:
 
 ```json
 {
   "servers": {
-    "dev-knowledge-mcp": {
+    "knowledge-ai-mcp": {
       "type": "stdio",
-      "command": "pnpm",
-      "args": ["--dir", "C:\\projetos\\knowledge-ai-core", "dev:mcp"],
+      "command": "dotnet",
+      "args": ["run", "--project", "C:\\projetos\\knowledge-ai-core-dotnet\\src\\KnowledgeAi.Mcp"],
       "env": {
-        "KNOWLEDGE_API_BASE_URL": "http://localhost:3000"
+        "KNOWLEDGE_API_BASE_URL": "http://localhost:5080",
+        "KNOWLEDGE_API_KEY": "<api-key>",
+        "KNOWLEDGE_USER_JWT": "<jwt-do-usuario>"
       }
     }
   }
@@ -101,15 +93,4 @@ search_user_stories
 get_service_context
 ```
 
-## Limitações Atuais
-
-O servidor MCP já conecta por `stdio` e chama a Knowledge API em `/mcp/search`.
-
-Ainda falta:
-
-- autenticação entre MCP e API;
-- retrieval real com pgvector;
-- documentos indexados;
-- retorno de fontes reais;
-- empacotamento binário publicado;
-- testes com clientes MCP reais.
+Veja `docs/mcp/tools.md` para o schema de cada uma.

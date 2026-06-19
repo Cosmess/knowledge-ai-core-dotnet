@@ -17,7 +17,7 @@ public sealed class OllamaLlmProvider : ILlmProvider
         _client = new OllamaApiClient(new Uri(settings.OllamaBaseUrl), settings.OllamaChatModel);
     }
 
-    public async Task<string> CompleteAsync(string systemPrompt, string userPrompt, CancellationToken cancellationToken)
+    public async Task<LlmCompletionResult> CompleteAsync(string systemPrompt, string userPrompt, CancellationToken cancellationToken)
     {
         var chat = new Chat(_client, systemPrompt);
         var builder = new StringBuilder();
@@ -27,6 +27,8 @@ public sealed class OllamaLlmProvider : ILlmProvider
             builder.Append(chunk);
         }
 
-        return builder.ToString();
+        // The high-level Chat helper does not surface prompt_eval_count/eval_count from the
+        // underlying Ollama API, so token usage cannot be reported for this provider today.
+        return new LlmCompletionResult(builder.ToString(), InputTokens: null, OutputTokens: null);
     }
 }

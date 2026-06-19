@@ -1,5 +1,6 @@
 using FluentAssertions;
 using KnowledgeAi.Application.Chat.Commands;
+using KnowledgeAi.Application.Common.Exceptions;
 using KnowledgeAi.Application.Common.Interfaces;
 using KnowledgeAi.Application.Common.Services;
 using KnowledgeAi.Domain.Entities;
@@ -16,16 +17,18 @@ public class AskQuestionCommandHandlerTests
     private readonly IQuestionClassifier _questionClassifier = Substitute.For<IQuestionClassifier>();
     private readonly IChatRepository _chatRepository = Substitute.For<IChatRepository>();
     private readonly ICurrentUserAccessor _currentUser = Substitute.For<ICurrentUserAccessor>();
+    private readonly ILlmMetricsRecorder _metricsRecorder = Substitute.For<ILlmMetricsRecorder>();
     private readonly AskQuestionCommandHandler _handler;
 
     public AskQuestionCommandHandlerTests()
     {
         _handler = new AskQuestionCommandHandler(
-            _embeddingProvider, _documentRepository, _llmProvider, _questionClassifier, _chatRepository, _currentUser);
+            _embeddingProvider, _documentRepository, _llmProvider, _questionClassifier, _chatRepository, _currentUser, _metricsRecorder);
 
         _embeddingProvider.EmbedAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(new float[1536]);
         _questionClassifier.Classify(Arg.Any<string>()).Returns(KnowledgeDomain.Technical);
         _currentUser.UserId.Returns(Guid.NewGuid());
+        _currentUser.AllowedSpaceKeys.Returns(new HashSet<string> { "ENG" });
         _chatRepository
             .GetOrCreateSessionAsync(Arg.Any<Guid?>(), Arg.Any<Guid>(), Arg.Any<CancellationToken>())
             .Returns(new ChatSession { Id = Guid.NewGuid(), UserId = Guid.NewGuid(), CreatedAt = DateTimeOffset.UtcNow });
@@ -37,7 +40,8 @@ public class AskQuestionCommandHandlerTests
         _documentRepository
             .SearchAsync(Arg.Any<DocumentSearchQuery>(), Arg.Any<CancellationToken>())
             .Returns(new[] { BuildResult(score: 0.15) });
-        _llmProvider.CompleteAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns("the answer");
+        _llmProvider.CompleteAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(new LlmCompletionResult("the answer", InputTokens: 100, OutputTokens: 20));
 
         var result = await _handler.Handle(
             new AskQuestionCommand("How does deploy work?", Audience.Developers, "ENG", "knowledge-ai"),
@@ -46,6 +50,7 @@ public class AskQuestionCommandHandlerTests
         result.EvidenceStatus.Should().Be(EvidenceStatus.Found);
         result.Answer.Should().Be("the answer");
         await _llmProvider.Received(1).CompleteAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
+        _metricsRecorder.Received(1).RecordCompletion(_llmProvider.ProviderName, 100, 20, wasFallback: false);
     }
 
     [Fact]
@@ -72,7 +77,7 @@ public class AskQuestionCommandHandlerTests
             .Returns(new[] { BuildResult(score: 0.9, content: "extractive fallback content") });
         _llmProvider
             .CompleteAsync(Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>())
-            .Returns(Task.FromException<string>(new InvalidOperationException("llm down")));
+            .Returns(Task.FromException<LlmCompletionResult>(new InvalidOperationException("llm down")));
 
         var result = await _handler.Handle(
             new AskQuestionCommand("How does deploy work?", Audience.Developers, "ENG", "knowledge-ai"),
@@ -80,6 +85,18 @@ public class AskQuestionCommandHandlerTests
 
         result.EvidenceStatus.Should().Be(EvidenceStatus.Found);
         result.Answer.Should().Be("extractive fallback content");
+        _metricsRecorder.Received(1).RecordCompletion(_llmProvider.ProviderName, null, null, wasFallback: true);
+    }
+
+    [Fact]
+    public async Task Handle_WhenSpaceKeyNotAllowed_ThrowsForbiddenAccessException()
+    {
+        var act = () => _handler.Handle(
+            new AskQuestionCommand("How does deploy work?", Audience.Developers, "OTHER", "knowledge-ai"),
+            CancellationToken.None);
+
+        await act.Should().ThrowAsync<ForbiddenAccessException>();
+        await _documentRepository.DidNotReceive().SearchAsync(Arg.Any<DocumentSearchQuery>(), Arg.Any<CancellationToken>());
     }
 
     private static DocumentChunkSearchResult BuildResult(double score, string content = "relevant content")

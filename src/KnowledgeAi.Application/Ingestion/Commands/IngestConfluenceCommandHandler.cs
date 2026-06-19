@@ -8,6 +8,7 @@ namespace KnowledgeAi.Application.Ingestion.Commands;
 public sealed class IngestConfluenceCommandHandler : IRequestHandler<IngestConfluenceCommand, IngestionResult>
 {
     private readonly IConfluenceClient _confluenceClient;
+    private readonly IContentSanitizer _contentSanitizer;
     private readonly IHtmlNormalizer _htmlNormalizer;
     private readonly IChunkingService _chunkingService;
     private readonly IEmbeddingProvider _embeddingProvider;
@@ -16,6 +17,7 @@ public sealed class IngestConfluenceCommandHandler : IRequestHandler<IngestConfl
 
     public IngestConfluenceCommandHandler(
         IConfluenceClient confluenceClient,
+        IContentSanitizer contentSanitizer,
         IHtmlNormalizer htmlNormalizer,
         IChunkingService chunkingService,
         IEmbeddingProvider embeddingProvider,
@@ -23,6 +25,7 @@ public sealed class IngestConfluenceCommandHandler : IRequestHandler<IngestConfl
         IIngestionJobRepository jobRepository)
     {
         _confluenceClient = confluenceClient;
+        _contentSanitizer = contentSanitizer;
         _htmlNormalizer = htmlNormalizer;
         _chunkingService = chunkingService;
         _embeddingProvider = embeddingProvider;
@@ -76,7 +79,8 @@ public sealed class IngestConfluenceCommandHandler : IRequestHandler<IngestConfl
 
     private async Task<int> ChunkAndSaveAsync(Document document, ConfluencePage page, CancellationToken cancellationToken)
     {
-        var plainText = _htmlNormalizer.ToPlainText(page.BodyHtml);
+        var sanitizedHtml = _contentSanitizer.Sanitize(page.BodyHtml);
+        var plainText = _htmlNormalizer.ToPlainText(sanitizedHtml);
         var chunks = _chunkingService.Split(plainText);
         var documentChunks = new List<DocumentChunk>(chunks.Count);
 

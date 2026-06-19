@@ -41,6 +41,10 @@ services:
       Redis__ConnectionString: "redis:6379"
       Jwt__SigningKey: "CHANGE_ME_use_a_long_random_secret_in_production"
       ApiKey__Value: "CHANGE_ME_static_key_shared_with_the_mcp_server"
+      # Criado automaticamente no startup se ainda não existir nenhum usuário com este e-mail.
+      AdminSeed__Email: "admin@example.com"
+      AdminSeed__Password: "CHANGE_ME_use_a_strong_password"
+      AdminSeed__SpaceKeys__0: "ENG"
       LlmProviders__OpenAiApiKey: "${OPENAI_API_KEY:-}"
       LlmProviders__AnthropicApiKey: "${ANTHROPIC_API_KEY:-}"
 
@@ -58,9 +62,36 @@ services:
     environment:
       KNOWLEDGE_API_BASE_URL: "http://api:8080"
       KNOWLEDGE_API_KEY: "CHANGE_ME_static_key_shared_with_the_mcp_server"
+      # JWT do usuário final (obtido via POST /auth/login), usado para aplicar AllowedSpaceKeys
+      # por usuário em /mcp/search. Expira conforme Jwt:ExpiresInSeconds — sem renovação automática.
+      KNOWLEDGE_USER_JWT: "CHANGE_ME_user_jwt_from_auth_login"
 
-  # grafana e prometheus ficam para um próximo passo (wiring de métricas/dashboards).
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: knowledge-ai-prometheus
+    depends_on:
+      - api
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./ops/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: knowledge-ai-grafana
+    depends_on:
+      - prometheus
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: "CHANGE_ME_grafana_admin_password"
+    volumes:
+      - ./ops/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana_data:/var/lib/grafana
 
 volumes:
   postgres_data:
   ollama_data:
+  prometheus_data:
+  grafana_data:

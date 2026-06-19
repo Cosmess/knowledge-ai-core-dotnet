@@ -1,4 +1,5 @@
 using System.Text.Json;
+using KnowledgeAi.Application.Common.Exceptions;
 
 namespace KnowledgeAi.Api.ExceptionHandling;
 
@@ -13,6 +14,7 @@ public static class ExceptionHandlingExtensions
             var (statusCode, message) = exception switch
             {
                 UnauthorizedAccessException => (StatusCodes.Status401Unauthorized, exception.Message),
+                ForbiddenAccessException => (StatusCodes.Status403Forbidden, exception.Message),
                 FluentValidation.ValidationException validationException =>
                     (StatusCodes.Status400BadRequest, string.Join(' ', validationException.Errors.Select(e => e.ErrorMessage))),
                 _ => (StatusCodes.Status500InternalServerError, "An unexpected error occurred."),

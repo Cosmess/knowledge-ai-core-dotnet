@@ -1,3 +1,4 @@
+using KnowledgeAi.Application.Common.Exceptions;
 using KnowledgeAi.Application.Common.Interfaces;
 using KnowledgeAi.Application.Common.Mediator;
 using KnowledgeAi.Application.Common.Models;
@@ -19,6 +20,7 @@ public sealed class AskQuestionCommandHandler : IRequestHandler<AskQuestionComma
     private readonly IQuestionClassifier _questionClassifier;
     private readonly IChatRepository _chatRepository;
     private readonly ICurrentUserAccessor _currentUser;
+    private readonly ILlmMetricsRecorder _metricsRecorder;
 
     public AskQuestionCommandHandler(
         IEmbeddingProvider embeddingProvider,
@@ -26,7 +28,8 @@ public sealed class AskQuestionCommandHandler : IRequestHandler<AskQuestionComma
         ILlmProvider llmProvider,
         IQuestionClassifier questionClassifier,
         IChatRepository chatRepository,
-        ICurrentUserAccessor currentUser)
+        ICurrentUserAccessor currentUser,
+        ILlmMetricsRecorder metricsRecorder)
     {
         _embeddingProvider = embeddingProvider;
         _documentRepository = documentRepository;
@@ -34,19 +37,27 @@ public sealed class AskQuestionCommandHandler : IRequestHandler<AskQuestionComma
         _questionClassifier = questionClassifier;
         _chatRepository = chatRepository;
         _currentUser = currentUser;
+        _metricsRecorder = metricsRecorder;
     }
 
     public async Task<AskQuestionResult> Handle(AskQuestionCommand request, CancellationToken cancellationToken)
     {
+        if (!_currentUser.AllowedSpaceKeys.Contains(request.SpaceKey))
+        {
+            throw new ForbiddenAccessException($"User does not have access to space '{request.SpaceKey}'.");
+        }
+
         var domain = _questionClassifier.Classify(request.Question);
         var queryEmbedding = await _embeddingProvider.EmbedAsync(request.Question, cancellationToken);
 
         var searchResults = await _documentRepository.SearchAsync(
-            new DocumentSearchQuery(queryEmbedding, domain, request.Audience, request.SpaceKey, request.System, MaxResults),
+            new DocumentSearchQuery(
+                queryEmbedding, request.Question, domain, request.Audience, request.SpaceKey, request.System, MaxResults, _currentUser.AllowedSpaceKeys),
             cancellationToken);
 
         var hasEnoughEvidence = searchResults.Count > 0 && searchResults[0].Score >= EvidenceThreshold;
         var evidenceStatus = hasEnoughEvidence ? EvidenceStatus.Found : EvidenceStatus.Insufficient;
+        _metricsRecorder.RecordEvidenceOutcome(hasEnoughEvidence);
 
         var (answer, confidence) = hasEnoughEvidence
             ? await BuildAnswerAsync(request, searchResults, cancellationToken)
@@ -83,12 +94,14 @@ public sealed class AskQuestionCommandHandler : IRequestHandler<AskQuestionComma
 
         try
         {
-            var answer = await _llmProvider.CompleteAsync(BuildSystemPrompt(request.Audience), userPrompt, cancellationToken);
-            return (answer, searchResults[0].Score);
+            var completion = await _llmProvider.CompleteAsync(BuildSystemPrompt(request.Audience), userPrompt, cancellationToken);
+            _metricsRecorder.RecordCompletion(_llmProvider.ProviderName, completion.InputTokens, completion.OutputTokens, wasFallback: false);
+            return (completion.Text, searchResults[0].Score);
         }
         catch
         {
             // Fallback extrativo: devolve o trecho mais relevante quando o provider de LLM falha.
+            _metricsRecorder.RecordCompletion(_llmProvider.ProviderName, null, null, wasFallback: true);
             return (searchResults[0].Chunk.Content, searchResults[0].Score);
         }
     }

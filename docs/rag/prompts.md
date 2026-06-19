@@ -1,26 +1,28 @@
 # Estratégia De Prompts
 
-Os prompts devem ser versionados.
+O system prompt real (`AskQuestionCommandHandler.BuildSystemPrompt`) está escrito **em português**, com duas variantes por `Audience`. O prompt do usuário é montado como:
 
-As instruções finais enviadas para agentes/modelos podem permanecer em inglês quando isso ajudar compatibilidade, consistência de avaliação ou reutilização com providers internacionais. A documentação explicativa para humanos deve permanecer em português.
+```txt
+Contexto:
+{conteúdo dos chunks recuperados, concatenados com linha em branco entre eles}
 
-## Prompt Para Desenvolvedores
+Pergunta: {pergunta do usuário}
+```
 
-Regras:
+O texto do contexto traz só o `Content` de cada chunk — não inclui título/URL da fonte explicitamente; a citação de fontes (regra abaixo) depende do próprio conteúdo do chunk, já que a referência estruturada (`sources[]`) é devolvida separadamente na resposta da API.
 
-- usar apenas contexto recuperado
-- citar fontes
-- separar regras de negócio de detalhes técnicos
-- mencionar quando faltar evidência
-- nunca expor segredos
-- identificar conflitos entre documentos
+## Prompt Para Desenvolvedores (`Audience.Developers`)
 
-## Prompt Para Operações/Produto
+> Use apenas o contexto recuperado, cite fontes, separe regras de negócio de detalhes técnicos, mencione quando faltar evidência, nunca exponha segredos, identifique conflitos entre documentos.
 
-Regras:
+## Prompt Para Demais Audiências (`Operations`/`Product`/`Support`/`Viewer`)
 
-- usar apenas contexto recuperado
-- explicar em linguagem simples
-- priorizar processo e regra de negócio
-- evitar detalhes internos de infraestrutura
-- recomendar validação com o time responsável quando houver risco operacional
+> Use apenas o contexto recuperado, explique em linguagem simples, priorize processo e regra de negócio, evite detalhes internos de infraestrutura, recomende validação com o time responsável quando houver risco operacional.
+
+## Fallback Extrativo
+
+Se o provedor de LLM falhar, a resposta cai para o conteúdo do chunk mais relevante (maior score), em vez de propagar o erro ao usuário.
+
+## Versionamento
+
+Ainda não implementado: o prompt é fixo no código (sem versionamento em runtime). A tabela `prompt_versions` existe no schema do banco, mas nenhum código a usa hoje — versionamento de prompt é roadmap (ver `docs/operations/llmops.md`).

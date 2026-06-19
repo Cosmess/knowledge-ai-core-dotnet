@@ -84,23 +84,38 @@ public sealed class DocumentRepository : IDocumentRepository
         await transaction.CommitAsync(cancellationToken);
     }
 
+    // Hybrid search: a broad top-N vector kNN candidate pool (cheap via the HNSW index) is
+    // reranked by blending vector similarity with full-text rank, then trimmed to the requested limit.
+    private const double VectorWeight = 0.7;
+    private const double TextWeight = 0.3;
+    private const int MinCandidatePoolSize = 25;
+    private const int CandidatePoolMultiplier = 5;
+
     public async Task<IReadOnlyList<DocumentChunkSearchResult>> SearchAsync(DocumentSearchQuery query, CancellationToken cancellationToken)
     {
         const string sql = """
-            select
-                dc.id as ChunkId, dc.document_id as DocumentId, dc.content as Content, dc.embedding as Embedding,
-                dc.domain as Domain, dc.metadata as Metadata, dc.created_at as ChunkCreatedAt, dc.updated_at as ChunkUpdatedAt,
-                d.title as Title, d.url as Url, d.source as Source, d.space_key as SpaceKey,
-                d.document_type as DocumentType, d.audience as Audience, d.system as System,
-                d.version as Version, d.updated_at as DocUpdatedAt, d.created_at as DocCreatedAt,
-                1 - (dc.embedding <=> @QueryEmbedding) as Score
-            from document_chunks dc
-            join documents d on d.id = dc.document_id
-            where (@Domain::text is null or dc.domain = @Domain)
-              and (@Audience::text is null or d.audience = @Audience)
-              and (@SpaceKey::text is null or d.space_key = @SpaceKey)
-              and (@System::text is null or d.system = @System)
-            order by dc.embedding <=> @QueryEmbedding
+            with candidates as (
+                select
+                    dc.id as ChunkId, dc.document_id as DocumentId, dc.content as Content, dc.embedding as Embedding,
+                    dc.domain as Domain, dc.metadata as Metadata, dc.created_at as ChunkCreatedAt, dc.updated_at as ChunkUpdatedAt,
+                    d.title as Title, d.url as Url, d.source as Source, d.space_key as SpaceKey,
+                    d.document_type as DocumentType, d.audience as Audience, d.system as System,
+                    d.version as Version, d.updated_at as DocUpdatedAt, d.created_at as DocCreatedAt,
+                    1 - (dc.embedding <=> @QueryEmbedding) as VectorScore,
+                    coalesce(ts_rank_cd(dc.search_vector, websearch_to_tsquery('portuguese', @QueryText), 32), 0) as TextScore
+                from document_chunks dc
+                join documents d on d.id = dc.document_id
+                where (@Domain::text is null or dc.domain = @Domain)
+                  and (@Audience::text is null or d.audience = @Audience)
+                  and (@SpaceKey::text is null or d.space_key = @SpaceKey)
+                  and (@System::text is null or d.system = @System)
+                  and (@AllowedSpaceKeys::text[] is null or d.space_key = any(@AllowedSpaceKeys))
+                order by dc.embedding <=> @QueryEmbedding
+                limit @CandidatePoolSize
+            )
+            select *, (@VectorWeight * VectorScore + @TextWeight * TextScore) as Score
+            from candidates
+            order by Score desc
             limit @Limit;
             """;
 
@@ -108,11 +123,16 @@ public sealed class DocumentRepository : IDocumentRepository
         var rows = await connection.QueryAsync<SearchRow>(new CommandDefinition(sql, new
         {
             QueryEmbedding = new Vector(query.QueryEmbedding),
+            query.QueryText,
             Domain = query.Domain?.ToString(),
             Audience = query.Audience?.ToString(),
             query.SpaceKey,
             query.System,
             query.Limit,
+            AllowedSpaceKeys = query.AllowedSpaceKeys?.ToArray(),
+            CandidatePoolSize = Math.Max(query.Limit * CandidatePoolMultiplier, MinCandidatePoolSize),
+            VectorWeight,
+            TextWeight,
         }, cancellationToken: cancellationToken));
 
         return rows.Select(row => row.ToSearchResult()).ToList();

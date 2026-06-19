@@ -43,4 +43,17 @@ public sealed class ChatEndpointTests : IClassFixture<KnowledgeApiFactory>
         result!.EvidenceStatus.Should().Be(EvidenceStatus.Insufficient);
         result.Confidence.Should().Be(0);
     }
+
+    [Fact]
+    public async Task Ask_WhenSpaceKeyIsNotAllowedForUser_ReturnsForbidden()
+    {
+        using var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Authorization =
+            new AuthenticationHeaderValue("Bearer", _factory.CreateAccessTokenFor(Role.Developer, "ENG"));
+
+        var response = await client.PostAsJsonAsync(
+            "chat", new AskQuestionCommand("How do I deploy this service?", Audience.Developers, "OTHER", "knowledge-ai"), ApiJsonOptions.Default);
+
+        response.StatusCode.Should().Be(HttpStatusCode.Forbidden);
+    }
 }

@@ -1,4 +1,5 @@
 using FluentAssertions;
+using KnowledgeAi.Application.Common.Exceptions;
 using KnowledgeAi.Application.Common.Interfaces;
 using KnowledgeAi.Application.Search.Queries;
 using KnowledgeAi.Domain.Entities;
@@ -11,12 +12,15 @@ public class SearchMcpQueryHandlerTests
 {
     private readonly IEmbeddingProvider _embeddingProvider = Substitute.For<IEmbeddingProvider>();
     private readonly IDocumentRepository _documentRepository = Substitute.For<IDocumentRepository>();
+    private readonly ICurrentUserAccessor _currentUser = Substitute.For<ICurrentUserAccessor>();
+    private readonly ILlmMetricsRecorder _metricsRecorder = Substitute.For<ILlmMetricsRecorder>();
     private readonly SearchMcpQueryHandler _handler;
 
     public SearchMcpQueryHandlerTests()
     {
-        _handler = new SearchMcpQueryHandler(_embeddingProvider, _documentRepository);
+        _handler = new SearchMcpQueryHandler(_embeddingProvider, _documentRepository, _currentUser, _metricsRecorder);
         _embeddingProvider.EmbedAsync(Arg.Any<string>(), Arg.Any<CancellationToken>()).Returns(new float[1536]);
+        _currentUser.AllowedSpaceKeys.Returns(new HashSet<string> { "ENG" });
     }
 
     [Fact]
@@ -29,6 +33,7 @@ public class SearchMcpQueryHandlerTests
         var result = await _handler.Handle(new SearchMcpQuery("query", null, null, null, null), CancellationToken.None);
 
         result.EvidenceStatus.Should().Be(EvidenceStatus.Found);
+        _metricsRecorder.Received(1).RecordEvidenceOutcome(hasEnoughEvidence: true);
     }
 
     [Fact]
@@ -65,6 +70,27 @@ public class SearchMcpQueryHandlerTests
         var result = await _handler.Handle(new SearchMcpQuery("query", null, null, null, null), CancellationToken.None);
 
         result.Domain.Should().Be(KnowledgeDomain.Technical);
+    }
+
+    [Fact]
+    public async Task Handle_WhenSpaceKeyIsNotAllowed_ThrowsForbiddenAccessException()
+    {
+        var act = () => _handler.Handle(new SearchMcpQuery("query", null, null, "OTHER", null), CancellationToken.None);
+
+        await act.Should().ThrowAsync<ForbiddenAccessException>();
+    }
+
+    [Fact]
+    public async Task Handle_WhenSpaceKeyIsAllowed_PassesAllowedSpaceKeysToSearch()
+    {
+        _documentRepository
+            .SearchAsync(Arg.Any<DocumentSearchQuery>(), Arg.Any<CancellationToken>())
+            .Returns(Array.Empty<DocumentChunkSearchResult>());
+
+        await _handler.Handle(new SearchMcpQuery("query", null, null, "ENG", null), CancellationToken.None);
+
+        await _documentRepository.Received(1).SearchAsync(
+            Arg.Is<DocumentSearchQuery>(q => q.AllowedSpaceKeys!.Contains("ENG")), Arg.Any<CancellationToken>());
     }
 
     private static DocumentChunkSearchResult BuildResult(double score)

@@ -56,6 +56,8 @@ public static class DependencyInjection
     private static void AddLlmProviders(IServiceCollection services, IConfiguration configuration)
     {
         services.Configure<LlmProviderOptions>(configuration.GetSection(LlmProviderOptions.SectionName));
+        services.Configure<LlmPricingOptions>(configuration.GetSection(LlmPricingOptions.SectionName));
+        services.AddSingleton<ILlmMetricsRecorder, PrometheusLlmMetricsRecorder>();
 
         services.AddSingleton<OpenAiLlmProvider>();
         services.AddSingleton<AnthropicLlmProvider>();
@@ -90,6 +92,7 @@ public static class DependencyInjection
         services.AddSingleton<IMarkdownLoader, MarkdigMarkdownLoader>();
         services.AddSingleton<IHtmlNormalizer, HtmlAgilityPackNormalizer>();
         services.AddSingleton<IChunkingService, HeadingChunkingService>();
+        services.AddSingleton<IContentSanitizer, HtmlContentSanitizer>();
 
         services.Configure<ConfluenceOptions>(configuration.GetSection(ConfluenceOptions.SectionName));
 
@@ -126,7 +129,9 @@ public static class DependencyInjection
     private static void AddAuthInfrastructure(IServiceCollection services, IConfiguration configuration)
     {
         services.Configure<JwtOptions>(configuration.GetSection(JwtOptions.SectionName));
+        services.Configure<AdminSeedOptions>(configuration.GetSection(AdminSeedOptions.SectionName));
         services.AddSingleton<IPasswordHasher, Pbkdf2PasswordHasher>();
         services.AddSingleton<IJwtTokenGenerator, JwtTokenGenerator>();
+        services.AddScoped<AdminUserSeeder>();
     }
 }

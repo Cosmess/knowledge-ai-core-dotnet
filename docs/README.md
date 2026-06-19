@@ -1,8 +1,8 @@
 # Documento de Design de Software
 
-Esta pasta é o SDD oficial do `knowledge-ai-core`.
+Esta pasta é o SDD oficial do `knowledge-ai-core` (reescrita .NET — Clean Architecture: `Api`/`Application`/`Domain`/`Infrastructure`/`Mcp`).
 
-Ela registra arquitetura, decisões técnicas, contratos de API, tools MCP, desenho do RAG, modelo de dados, segurança, operação e roadmap.
+Ela registra arquitetura, decisões técnicas, contratos de API, tools MCP, desenho do RAG, modelo de dados, segurança, operação e roadmap, descrevendo a implementação .NET atual — não o projeto original em NestJS/TypeScript que antecedeu esta reescrita.
 
 ## Índice
 
