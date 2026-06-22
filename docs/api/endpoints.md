@@ -1,6 +1,6 @@
 # Endpoints Da API
 
-## Implementados (12)
+## Implementados (13)
 
 ```http
 GET  /health
